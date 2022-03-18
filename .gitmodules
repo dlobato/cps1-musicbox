@@ -1,0 +1,12 @@
+[submodule "gateware/rtl/jtframe"]
+	path = gateware/rtl/jtframe
+	url = git@github.com:jotego/jtframe.git
+[submodule "gateware/rtl/jt51"]
+	path = gateware/rtl/jt51
+	url = git@github.com:jotego/jt51.git
+[submodule "gateware/rtl/jt6295"]
+	path = gateware/rtl/jt6295
+	url = git@github.com:jotego/jt6295.git
+[submodule "gateware/rtl/ulx3s-misc"]
+	path = gateware/rtl/ulx3s-misc
+	url = git@github.com:emard/ulx3s-misc.git

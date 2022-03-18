@@ -1,0 +1,10 @@
+build
+*.o
+*.d
+*.bin
+*.elf
+*.map
+.vscode
+*.pyc
+.idea
+csr.csv

@@ -1,3 +1,5 @@
+import shutil
+
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.csr import *
@@ -52,3 +54,10 @@ class CPS1MusicboxSoC(SoCCore):
             mixer.i_pcm_left.eq(jt6295_sound_upsampled),
             mixer.i_pcm_right.eq(jt6295_sound_upsampled),
         ]
+
+    def build(self, build_dir, *args, **kwargs):
+        init_paths = JT6295.fir_init_paths() + Uprate2Fir.fir_init_paths()
+        for f in init_paths:
+            shutil.copy(f, build_dir)
+        return super().build(build_dir=build_dir, *args, **kwargs)
+

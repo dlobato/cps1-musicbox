@@ -24,12 +24,10 @@ from litedram.phy.model import SDRAMPHYModel
 
 from litescope import LiteScopeAnalyzer
 
+from gateware.soc import CPS1MusicboxSoC
 from gateware.daodump import DaoDump
 
 # IOs ----------------------------------------------------------------------------------------------
-from gateware.jt6295.jt6295 import JT6295
-from gateware.jtframe.sound.uprate2_fir import Uprate2Fir
-from gateware.soc import CPS1MusicboxSoC
 
 _io = [
     # Clk / Rst.
@@ -133,6 +131,8 @@ class SimSoC(CPS1MusicboxSoC):
             self.dao_dump.left.eq(self.mixer.o_mixed_left),
             self.dao_dump.right.eq(self.mixer.o_mixed_right)
         ]
+
+        self.add_sdcard("sdcard", mode="read", use_emulator=True)
 
         # Simulation debugging ----------------------------------------------------------------------
         if sim_debug:
@@ -291,9 +291,6 @@ def main():
 
     builder_kwargs["csr_csv"] = "csr.csv"
     builder = Builder(soc, **builder_kwargs)
-    init_paths = JT6295.fir_init_paths() + Uprate2Fir.fir_init_paths()
-    for f in init_paths:
-        shutil.copy(f, builder.gateware_dir)
     builder.build(
         sim_config       = sim_config,
         interactive      = not args.non_interactive,

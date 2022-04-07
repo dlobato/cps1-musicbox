@@ -1,6 +1,8 @@
 INCLUDE generated/output_format.ld
 ENTRY(_start)
 
+__DYNAMIC = 0;
+
 INCLUDE generated/regions.ld
 
 SECTIONS
@@ -8,9 +10,6 @@ SECTIONS
 	.text :
 	{
 		_ftext = .;
-		/* Quicklogic EOS-S3 interrupt vector table uses section name "isr_vector" */
-		/* ARM table has to be placed at start */
-		KEEP(*(.isr_vector))
 		/* Make sure crt0 files come first, and they, and the isr */
 		/* don't get disposed of by greedy optimisation */
 		*crt0*(.text)
@@ -19,7 +18,7 @@ SECTIONS
 
 		*(.text .stub .text.* .gnu.linkonce.t.*)
 		_etext = .;
-	} > rom
+	} > main_ram
 
 	.rodata :
 	{
@@ -27,29 +26,9 @@ SECTIONS
 		_frodata = .;
 		*(.rodata .rodata.* .gnu.linkonce.r.*)
 		*(.rodata1)
-		*(.got .got.*)
-		*(.toc .toc.*)
-
-		/* Make sure the file is aligned on disk as well
-		   as in memory; CRC calculation requires that. */
-		FILL(0);
 		. = ALIGN(8);
 		_erodata = .;
-	} > rom
-
-	.commands :
-	{
-		PROVIDE_HIDDEN (__bios_cmd_start = .);
-		KEEP(*(.bios_cmd))
-		PROVIDE_HIDDEN (__bios_cmd_end = .);
-	} > rom
-
-	.init :
-	{
-		PROVIDE_HIDDEN (__bios_init_start = .);
-		KEEP(*(.bios_init))
-		PROVIDE_HIDDEN (__bios_init_end = .);
-	} > rom
+	} > main_ram
 
 	.data :
 	{
@@ -57,14 +36,11 @@ SECTIONS
 		_fdata = .;
 		*(.data .data.* .gnu.linkonce.d.*)
 		*(.data1)
+		_gp = ALIGN(16);
 		*(.sdata .sdata.* .gnu.linkonce.s.*)
-
-		/* Make sure the file is aligned on disk as well
-		   as in memory; CRC calculation requires that. */
-		FILL(0);
 		. = ALIGN(8);
 		_edata = .;
-	} > sram AT > rom
+	} > sram AT > main_ram
 
 	.bss :
 	{
@@ -81,11 +57,12 @@ SECTIONS
 		_end = .;
 	} > sram
 
-	/DISCARD/ :
+	.msm6295_rom :
 	{
-		*(.eh_frame)
-		*(.comment)
-	}
+		. = ALIGN(8);
+		KEEP(*(.msm6295_rom))
+		. = ALIGN(8);
+	} > main_ram
 }
 
 PROVIDE(_fstack = ORIGIN(sram) + LENGTH(sram));

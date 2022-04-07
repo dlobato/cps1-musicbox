@@ -1,6 +1,9 @@
 #include "ym2151.h"
-
 #include <generated/csr.h>
+
+void ym2151_init(void) {
+    jt51_control_reset_write(0);
+}
 
 void ym2151_write_cmd(uint8_t addr, uint8_t data) {
     // wait ready

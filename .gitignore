@@ -2,6 +2,7 @@ build
 *.o
 *.d
 *.bin
+*.asm
 *.elf
 *.map
 .vscode

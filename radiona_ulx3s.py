@@ -32,7 +32,7 @@ from gateware.dacpwm import DacPWM
 # CRG ----------------------------------------------------------------------------------------------
 
 class _CRG(Module):
-    def __init__(self, platform, sys_clk_freq, with_usb_pll=False, with_video_pll=False, sdram_rate="1:1"):
+    def __init__(self, platform, sys_clk_freq, sdram_rate="1:1"):
         self.rst = Signal()
         self.clock_domains.cd_sys    = ClockDomain()
         if sdram_rate == "1:2":
@@ -58,26 +58,6 @@ class _CRG(Module):
         else:
            pll.create_clkout(self.cd_sys_ps, sys_clk_freq, phase=90)
 
-        # USB PLL
-        if with_usb_pll:
-            self.submodules.usb_pll = usb_pll = ECP5PLL()
-            self.comb += usb_pll.reset.eq(rst | self.rst)
-            usb_pll.register_clkin(clk25, 25e6)
-            self.clock_domains.cd_usb_12 = ClockDomain()
-            self.clock_domains.cd_usb_48 = ClockDomain()
-            usb_pll.create_clkout(self.cd_usb_12, 12e6, margin=0)
-            usb_pll.create_clkout(self.cd_usb_48, 48e6, margin=0)
-
-        # Video PLL
-        if with_video_pll:
-            self.submodules.video_pll = video_pll = ECP5PLL()
-            self.comb += video_pll.reset.eq(rst | self.rst)
-            video_pll.register_clkin(clk25, 25e6)
-            self.clock_domains.cd_hdmi   = ClockDomain()
-            self.clock_domains.cd_hdmi5x = ClockDomain()
-            video_pll.create_clkout(self.cd_hdmi,    25e6, margin=0)
-            video_pll.create_clkout(self.cd_hdmi5x, 125e6, margin=0)
-
         # SDRAM clock
         sdram_clk = ClockSignal("sys2x_ps" if sdram_rate == "1:2" else "sys_ps")
         self.specials += DDROutput(1, 0, platform.request("sdram_clock"), sdram_clk)
@@ -90,7 +70,7 @@ class _CRG(Module):
 class BaseSoC(CPS1MusicboxSoC):
     def __init__(self, device="LFE5U-45F", revision="2.0", toolchain="trellis",
         sys_clk_freq=int(50e6), sdram_module_cls="MT48LC16M16", sdram_rate="1:1",
-        with_led_chaser=True, with_video_terminal=False, with_video_framebuffer=False,
+        with_led_chaser=True, with_video_terminal=False,
         with_spi_flash=False, **kwargs):
         platform = radiona_ulx3s.Platform(device=device, revision=revision, toolchain=toolchain)
         platform.add_extension([
@@ -106,9 +86,7 @@ class BaseSoC(CPS1MusicboxSoC):
             **kwargs)
 
         # CRG --------------------------------------------------------------------------------------
-        with_usb_pll   = kwargs.get("uart_name", None) == "usb_acm"
-        with_video_pll = with_video_terminal or with_video_framebuffer
-        self.submodules.crg = _CRG(platform, sys_clk_freq, with_usb_pll, with_video_pll, sdram_rate=sdram_rate)
+        self.submodules.crg = _CRG(platform, sys_clk_freq, sdram_rate=sdram_rate)
 
         # SDR SDRAM --------------------------------------------------------------------------------
         if not self.integrated_main_ram_size:
@@ -121,14 +99,6 @@ class BaseSoC(CPS1MusicboxSoC):
                 l2_cache_size = kwargs.get("l2_size", 8192)
             )
 
-        # Video ------------------------------------------------------------------------------------
-        if with_video_terminal or with_video_framebuffer:
-            self.submodules.videophy = VideoHDMIPHY(platform.request("gpdi"), clock_domain="hdmi")
-            if with_video_terminal:
-                self.add_video_terminal(phy=self.videophy, timings="640x480@75Hz", clock_domain="hdmi")
-            if with_video_framebuffer:
-                self.add_video_framebuffer(phy=self.videophy, timings="640x480@75Hz", clock_domain="hdmi")
-
         # SPI Flash --------------------------------------------------------------------------------
         if with_spi_flash:
             from litespi.modules import IS25LP128
@@ -140,47 +110,6 @@ class BaseSoC(CPS1MusicboxSoC):
             self.submodules.leds = LedChaser(
                 pads         = platform.request_all("user_led"),
                 sys_clk_freq = sys_clk_freq)
-
-        # JT51
-        self.submodules.jt51 = JT51(platform, sys_clk_freq)
-
-        # JT6295
-        self.add_constant("JT6295_ROM_SIZE", 256 * 1024)
-        base = self.mem_map.get("jt6295_rom", 0x40c00000)
-        bus = wishbone.Interface(data_width=8, adr_width=self.bus.address_width)
-        self.add_wb_master(bus)
-
-        self.submodules.jt6295_rom_dma = JT6295RomWishboneDMAReader(
-            bus=bus,
-            base_address=base,
-            with_csr=True
-        )
-        self.submodules.jt6295 = JT6295(
-            platform=platform,
-            clk_freq=sys_clk_freq
-        )
-        self.comb += [
-            self.jt6295_rom_dma.i_rom_addr.eq(self.jt6295.o_rom_addr),
-            self.jt6295.i_rom_data.eq(self.jt6295_rom_dma.o_rom_data),
-            self.jt6295.i_rom_ok.eq(self.jt6295_rom_dma.o_rom_ok),
-        ]
-
-        jt6295_sound_upsampled = Signal(16)
-        self.submodules.jtframe_uprate2_fir = Uprate2Fir(platform)
-        self.comb += [
-            self.jtframe_uprate2_fir.i_sample.eq(self.jt6295.sample),
-            self.jtframe_uprate2_fir.l_in.eq(Cat(Signal(2), self.jt6295.sound)),
-            self.jtframe_uprate2_fir.r_in.eq(0),
-            jt6295_sound_upsampled.eq(self.jtframe_uprate2_fir.l_out)
-        ]
-
-        self.submodules.mixer = mixer = CPS1StereoMixer(platform)
-        self.comb += [
-            mixer.i_fm_left.eq(self.jt51.xleft),
-            mixer.i_fm_right.eq(self.jt51.xright),
-            mixer.i_pcm_left.eq(jt6295_sound_upsampled),
-            mixer.i_pcm_right.eq(jt6295_sound_upsampled),
-        ]
 
         # DAC left & right
         self.submodules.dac_left = DacPWM(platform)
@@ -210,9 +139,6 @@ def main():
     sdopts.add_argument("--with-sdcard",     action="store_true",   help="Enable SDCard support.")
     parser.add_argument("--with-oled",       action="store_true",   help="Enable SDD1331 OLED support.")
     parser.add_argument("--sdram-rate",      default="1:1",         help="SDRAM Rate (1:1 Full Rate or 1:2 Half Rate).")
-    viopts = parser.add_mutually_exclusive_group()
-    viopts.add_argument("--with-video-terminal",    action="store_true", help="Enable Video Terminal (HDMI).")
-    viopts.add_argument("--with-video-framebuffer", action="store_true", help="Enable Video Framebuffer (HDMI).")
     builder_args(parser)
     soc_core_args(parser)
     trellis_args(parser)
@@ -225,8 +151,6 @@ def main():
         sys_clk_freq           = int(float(args.sys_clk_freq)),
         sdram_module_cls       = args.sdram_module,
         sdram_rate             = args.sdram_rate,
-        with_video_terminal    = args.with_video_terminal,
-        with_video_framebuffer = args.with_video_framebuffer,
         with_spi_flash         = args.with_spi_flash,
         **soc_core_argdict(args))
     if args.with_spi_sdcard:
@@ -237,9 +161,6 @@ def main():
         soc.add_oled()
 
     builder = Builder(soc, **builder_argdict(args))
-    init_paths = JT6295.fir_init_paths() + Uprate2Fir.fir_init_paths()
-    for f in init_paths:
-        shutil.copy(f, builder.gateware_dir)
     builder_kargs = trellis_argdict(args) if args.toolchain == "trellis" else {}
     builder.build(**builder_kargs, run=args.build)
 

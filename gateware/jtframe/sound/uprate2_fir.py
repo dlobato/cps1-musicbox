@@ -43,7 +43,7 @@ class Uprate2Fir(Module):
     @staticmethod
     def add_sources(platform):
         platform.add_source("gateware/rtl/jtframe/hdl/sound/jtframe_uprate2_fir.v")
-        platform.add_source("gateware/rtl/jtframe/hdl/sound/jtframe_fir.v")
+        platform.add_source("gateware/rtl/jtframe_fir.v")
 
     @staticmethod
     def fir_init_paths():
